@@ -1,0 +1,184 @@
+name: ecommerce-prod
+
+services:
+  mongo-auth:
+    image: mongo:6
+    volumes:
+      - mongo_auth_prod_data:/data/db
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          memory: 512M
+
+  mongo-product:
+    image: mongo:6
+    volumes:
+      - mongo_product_prod_data:/data/db
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          memory: 512M
+
+  mongo-order:
+    image: mongo:6
+    volumes:
+      - mongo_order_prod_data:/data/db
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          memory: 512M
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+      target: production
+    image: ecommerce/auth-service:${IMAGE_TAG:-prod}
+    env_file:
+      - .env.production
+    environment:
+      MONGODB_URI: mongodb://mongo-auth:27017/authdb
+      PORT: "3001"
+      NODE_ENV: production
+    depends_on:
+      mongo-auth:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+  product-service:
+    build:
+      context: ./services/product-service
+      dockerfile: Dockerfile
+      target: production
+    image: ecommerce/product-service:${IMAGE_TAG:-prod}
+    environment:
+      MONGODB_URI: mongodb://mongo-product:27017/productdb
+      PORT: "3000"
+      NODE_ENV: production
+    depends_on:
+      mongo-product:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+      target: production
+    image: ecommerce/order-service:${IMAGE_TAG:-prod}
+    env_file:
+      - .env.production
+    environment:
+      MONGODB_URI: mongodb://mongo-order:27017/orderdb
+      PORT: "3002"
+      NODE_ENV: production
+    depends_on:
+      mongo-order:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    image: ecommerce/frontend:${IMAGE_TAG:-prod}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - product-service
+      - order-service
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+networks:
+  ecommerce-network:
+    driver: bridge
+
+volumes:
+  mongo_auth_prod_data:
+  mongo_product_prod_data:
+  mongo_order_prod_data:
