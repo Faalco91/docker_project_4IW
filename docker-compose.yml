@@ -1,0 +1,136 @@
+name: ecommerce-dev
+
+services:
+  mongo-auth:
+    image: mongo:6
+    volumes:
+      - mongo_auth_data:/data/db
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mongo-product:
+    image: mongo:6
+    volumes:
+      - mongo_product_data:/data/db
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mongo-order:
+    image: mongo:6
+    volumes:
+      - mongo_order_data:/data/db
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      MONGODB_URI: mongodb://mongo-auth:27017/authdb
+      JWT_SECRET: dev_jwt_secret
+      PORT: "3001"
+      NODE_ENV: development
+    volumes:
+      - ./services/auth-service/src:/app/src
+      - ./services/auth-service/package.json:/app/package.json
+    ports:
+      - "3001:3001"
+    depends_on:
+      mongo-auth:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+
+  product-service:
+    build:
+      context: ./services/product-service
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      MONGODB_URI: mongodb://mongo-product:27017/productdb
+      PORT: "3000"
+      NODE_ENV: development
+    volumes:
+      - ./services/product-service/src:/app/src
+      - ./services/product-service/package.json:/app/package.json
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongo-product:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      MONGODB_URI: mongodb://mongo-order:27017/orderdb
+      JWT_SECRET: dev_jwt_secret
+      PORT: "3002"
+      NODE_ENV: development
+    volumes:
+      - ./services/order-service/src:/app/src
+      - ./services/order-service/package.json:/app/package.json
+    ports:
+      - "3002:3002"
+    depends_on:
+      mongo-order:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      VITE_AUTH_SERVICE_URL: http://auth-service:3001
+      VITE_PRODUCT_SERVICE_URL: http://product-service:3000
+      VITE_ORDER_SERVICE_URL: http://order-service:3002
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.js:/app/vite.config.js
+      - ./frontend/package.json:/app/package.json
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - product-service
+      - order-service
+    networks:
+      - ecommerce-network
+
+networks:
+  ecommerce-network:
+    driver: bridge
+
+volumes:
+  mongo_auth_data:
+  mongo_product_data:
+  mongo_order_data:
